@@ -354,7 +354,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7860)
-    parser.add_argument("--share", default=True)
+    parser.add_argument("--share", action='store_true')
     parser.add_argument("--model-path", type=str,
                         default="Lin-Chen/ShareGPT4V-7B")
     parser.add_argument("--model-name", type=str,

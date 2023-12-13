@@ -18,7 +18,7 @@ from transformers import TextIteratorStreamer
 
 from fastapi import FastAPI, Request, Response, UploadFile
 from typing import Optional, List
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import uvicorn
 import base64
 
@@ -386,12 +386,13 @@ async def read_file_as_base64(file: UploadFile) -> str:
 
 @app.post("/generate")
 async def generate(
-    prompt: str = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\n ASSISTANT:", 
+    prompt: str, 
     images: List[UploadFile] = None,
     temperature: float = 0.2,
     top_p: float = 0.7,
     max_new_tokens: int = 512,
-    stop: str = "</s>"
+    stop: str = "</s>",
+    streaming: bool = True  # 控制流式传输
 ):
 
     images_base64 = [await read_file_as_base64(image) for image in images]
@@ -407,10 +408,17 @@ async def generate(
 
     response_gen = get_response(params)
 
-    async def generate_stream():
-        for text_chunk in response_gen:
-            yield text_chunk.decode() + "\n"
-
+    if streaming:
+        # 流式传输
+        async def generate_stream():
+            for text_chunk in response_gen:
+                yield text_chunk.decode() + "\n"
+    else:
+        # 一次性返回最后一段
+        output_chunks = [chunk.decode() for chunk in response_gen]
+        final_output = output_chunks[-1] if output_chunks else ""
+        async def generate_stream():
+            yield final_output
     return StreamingResponse(generate_stream(), media_type='text/event-stream')
 
 def run_demo():

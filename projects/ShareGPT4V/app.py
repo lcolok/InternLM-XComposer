@@ -404,7 +404,6 @@ async def generate(
         "max_new_tokens": max_new_tokens,
         "stop": stop,
     }
-    
 
     response_gen = get_response(params)
 

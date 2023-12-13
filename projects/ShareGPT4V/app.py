@@ -15,7 +15,12 @@ from llava.mm_utils import (KeywordsStoppingCriteria, load_image_from_base64,
                             process_images, tokenizer_image_token)
 from llava.model.builder import load_pretrained_model
 from transformers import TextIteratorStreamer
-from flask import Flask, Response, request, jsonify
+
+from fastapi import FastAPI, Request, Response, UploadFile
+from typing import Optional, List
+from fastapi.responses import StreamingResponse
+import uvicorn
+import base64
 
 
 print(gr.__version__)
@@ -371,41 +376,49 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-# 创建 Flask 应用程序
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route("/generate", methods=["POST"])
-def generate():
-    data = request.json
-    prompt = data.get("prompt", "")
-    images = data.get("images", None)
-    temperature = data.get("temperature", 0.2)
-    top_p = data.get("top_p", 0.7)
-    max_new_tokens = data.get("max_new_tokens", 512)
-    stop = data.get("stop", None)
+async def read_file_as_base64(file: UploadFile) -> str:
+    """
+    将文件读取为 base64 编码的字符串
+    """
+    return base64.b64encode(await file.read()).decode()
+
+@app.post("/generate")
+async def generate(
+    prompt: str = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\n ASSISTANT:", 
+    images: List[UploadFile] = None,
+    temperature: float = 0.2,
+    top_p: float = 0.7,
+    max_new_tokens: int = 512,
+    stop: str = "</s>"
+):
+
+    images_base64 = [await read_file_as_base64(image) for image in images]
 
     params = {
         "prompt": prompt,
-        "images": images,
+        "images": images_base64,
         "temperature": temperature,
         "top_p": top_p,
         "max_new_tokens": max_new_tokens,
         "stop": stop,
     }
+    
 
     response_gen = get_response(params)
 
-    def generate_stream():
+    async def generate_stream():
         for text_chunk in response_gen:
-            yield text_chunk.decode() + "\n"  # 添加换行符，针对每一个消息包
+            yield text_chunk.decode() + "\n"
 
-    return Response(generate_stream(), content_type='text/event-stream')  # 改为 text/event-stream
+    return StreamingResponse(generate_stream(), media_type='text/event-stream')
 
 def run_demo():
     demo.launch(server_name=args.host, server_port=args.port, share=args.share)
 
 def run_app():
-    app.run(host=args.host, port=args.api_port)
+    uvicorn.run(app, host=args.host, port=args.api_port, log_level='debug')
 
 if __name__ == '__main__':
     args = parse_args()
@@ -415,12 +428,11 @@ if __name__ == '__main__':
     demo = build_demo()
     demo.queue()
 
-    # 创建并启动两个线程
+    # 创建并启动线程运行演示
     thread_demo = Thread(target=run_demo)
-    thread_app = Thread(target=run_app)
-
     thread_demo.start()
-    thread_app.start()
+
+    # 直接运行API服务
+    run_app()
 
     thread_demo.join()
-    thread_app.join()

@@ -15,6 +15,8 @@ from llava.mm_utils import (KeywordsStoppingCriteria, load_image_from_base64,
                             process_images, tokenizer_image_token)
 from llava.model.builder import load_pretrained_model
 from transformers import TextIteratorStreamer
+from flask import Flask, request, jsonify
+
 
 print(gr.__version__)
 
@@ -360,6 +362,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7860)
+    parser.add_argument("--api_port", type=int, default=7861)
     parser.add_argument("--share", action='store_true')
     parser.add_argument("--model-path", type=str,
                         default="Lin-Chen/ShareGPT4V-7B")
@@ -368,6 +371,43 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+# 创建 Flask 应用程序
+app = Flask(__name__)
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    data = request.json
+    prompt = data.get("prompt", "")
+    images = data.get("images", None)  # 图片可以是 base64 编码的字符串列表
+    temperature = data.get("temperature", 0.2)
+    top_p = data.get("top_p", 0.7)
+    max_new_tokens = data.get("max_new_tokens", 512)
+    stop = data.get("stop", None)
+
+    params = {
+        "prompt": prompt,
+        "images": images,
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_new_tokens": max_new_tokens,
+        "stop": stop,
+    }
+
+    response_gen = get_response(params)
+
+    # 从生成器中获取所有输出
+    response_text = ""
+    for text_chunk in response_gen:
+        response_text += text_chunk.decode()
+
+    # 返回 JSON 序列化后的文本
+    return jsonify({"response": response_text})
+
+def run_demo():
+    demo.launch(server_name=args.host, server_port=args.port, share=args.share)
+
+def run_app():
+    app.run(host=args.host, port=args.api_port)
 
 if __name__ == '__main__':
     args = parse_args()
@@ -376,6 +416,13 @@ if __name__ == '__main__':
         args.model_path, None, args.model_name, False, False)
     demo = build_demo()
     demo.queue()
-    demo.launch(server_name=args.host,
-                server_port=args.port,
-                share=args.share)
+
+    # 创建并启动两个线程
+    thread_demo = Thread(target=run_demo)
+    thread_app = Thread(target=run_app)
+
+    thread_demo.start()
+    thread_app.start()
+
+    thread_demo.join()
+    thread_app.join()

@@ -60,6 +60,10 @@ def clear_history():
 
 
 def add_text(state, text, image, image_process_mode):
+    if state is None:
+        # 初始化 state 或返回错误
+        state = default_conversation.copy()  # 或者返回错误消息
+        
     if len(text) <= 0 and image is None:
         state.skip_next = True
         return (state, state.to_gradio_chatbot(), "", None)
@@ -219,6 +223,8 @@ def http_bot(state, temperature, top_p, max_new_tokens):
         "stop": state.sep if state.sep_style in [SeparatorStyle.SINGLE, SeparatorStyle.MPT] else state.sep2,
         "images": f'List of {len(state.get_images())} images: {all_image_hash}',
     }
+
+    print(pload)
 
     pload['images'] = state.get_images()
 

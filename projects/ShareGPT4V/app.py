@@ -15,7 +15,7 @@ from llava.mm_utils import (KeywordsStoppingCriteria, load_image_from_base64,
                             process_images, tokenizer_image_token)
 from llava.model.builder import load_pretrained_model
 from transformers import TextIteratorStreamer
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify
 
 
 print(gr.__version__)
@@ -378,7 +378,7 @@ app = Flask(__name__)
 def generate():
     data = request.json
     prompt = data.get("prompt", "")
-    images = data.get("images", None)  # 图片可以是 base64 编码的字符串列表
+    images = data.get("images", None)
     temperature = data.get("temperature", 0.2)
     top_p = data.get("top_p", 0.7)
     max_new_tokens = data.get("max_new_tokens", 512)
@@ -395,13 +395,11 @@ def generate():
 
     response_gen = get_response(params)
 
-    # 从生成器中获取所有输出
-    response_text = ""
-    for text_chunk in response_gen:
-        response_text += text_chunk.decode()
+    def generate_stream():
+        for text_chunk in response_gen:
+            yield text_chunk.decode() + "\n"  # 添加换行符，针对每一个消息包
 
-    # 返回 JSON 序列化后的文本
-    return jsonify({"response": response_text})
+    return Response(generate_stream(), content_type='text/event-stream')  # 改为 text/event-stream
 
 def run_demo():
     demo.launch(server_name=args.host, server_port=args.port, share=args.share)
